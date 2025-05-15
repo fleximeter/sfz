@@ -7,11 +7,17 @@ This file turns the SFZ file into a series of tokens.
 from enum import Enum
 
 class SfzSyntaxError(SyntaxError):
+    """
+    Represents a syntax error in a SFZ file
+    """
     def __init__(self, msg):
         super(SfzSyntaxError, self).__init__()
         self.msg = msg
 
 class TokenType(Enum):
+    """
+    Represents different kinds of tokens in a SFZ file
+    """
     COMMENT = 1 # comments start with //
     OPERATOR = 2 # generally just the = operator
     HEADER = 3 # an item inside <> brackets
@@ -23,13 +29,21 @@ class TokenType(Enum):
 
 # Tracks the state when we parse a key/value pair
 class State(Enum):
-    KEY = 1
-    VALUE = 2
-    EQ = 3
-    OTHER = 4
+    VALUE = 1
+    EQ = 2
 
 class Token:
+    """
+    Represents a single token in a SFZ file
+    """
     def __init__(self, token_type: TokenType, contents, line: int, column: int):
+        """
+        Creates a new `Token`, given the contents, location, and `TokenType`.
+        :param token_type: The `TokenType` of the token
+        :param contents: The string representation of the token in the file
+        :param line: The 1-based line number
+        :param column: The 1-based column number
+        """
         self.token_type = token_type
         self.lexeme = contents
         self.line = line
@@ -37,7 +51,8 @@ class Token:
 
 class LineLexer:
     """
-    We lex individual lines separately.
+    A lexer for individual lines in a file. The `Lexer` class extracts lines
+    and runs them through instances of this class.
     """
     def __init__(self, string: str, line_no: int):
         """
@@ -90,7 +105,7 @@ class LineLexer:
         word_start = self.idx
         word_end = -1
 
-        state = State.KEY
+        state = State.VALUE
 
         while self.idx < len(self.string):
             if self.string[self.idx] == '/' and self.peek('/'):
@@ -103,23 +118,24 @@ class LineLexer:
                     word_start = self.idx
                     block_start_point = self.idx
             else:
-                if self.string[self.idx] == '=':
+                # If a new word is starting, track that
+                if self.string[self.idx] == ' ' and self.peek_is_alpha():
+                    word_start = self.idx + 1
+                # If a word is ending, track that
+                elif (self.peek(' ') or self.peek('=')) and self.string[self.idx] != ' ':
+                    word_end = self.idx + 1    
+                # If we hit an =
+                elif self.string[self.idx] == '=':
                     # If the string before the = has a separate word at the end, we pull out the beginning
                     # of the string and make it a value.
                     if block_start_point < word_start:
-                        self.value(self.string[block_start_point:self.idx], block_start_point)
+                        self.value(self.string[block_start_point:word_start-1], block_start_point)
                     # The word right before the = is the key.
                     self.tokenized_buffer.append(Token(TokenType.KEY, self.string[word_start:word_end], self.line_no + 1, word_start + 1))
                     state = State.EQ
                     self.tokenized_buffer.append(Token(TokenType.OPERATOR, self.string[self.idx], self.line_no + 1, self.idx + 1))
             
-                # If a new word is starting, track that
-                elif self.string[self.idx] == ' ' and self.peek_is_alpha():
-                    word_start = self.idx + 1
-                # If a word is ending, track that
-                elif (self.peek(' ') or self.peek('=')) and self.string[self.idx] != ' ':
-                    word_end = self.idx + 1    
-            self.idx += 1
+                self.idx += 1
         
         # If there's a trailing value, add it in
         if block_start_point < self.idx:
@@ -138,7 +154,7 @@ class LineLexer:
                 number = float(val)
                 self.tokenized_buffer.append(Token(TokenType.FLOAT_VALUE, number, self.line_no + 1, column + 1))
             except Exception as _:
-                self.tokenized_buffer.append(Token(TokenType.STRING_VALUE, self.string[column:self.idx], self.line_no + 1, column + 1))
+                self.tokenized_buffer.append(Token(TokenType.STRING_VALUE, val, self.line_no + 1, column + 1))
 
     def lex(self):
         """
@@ -195,18 +211,26 @@ class LineLexer:
 
 
 class Lexer:
+    """
+    Manages the lexing process for one string (typically, one file).
+    The lexing happens automatically on construction, and the results are found
+    in `self.tokenized_buffer`.
+    """
     def __init__(self, string):
+        """
+        Creates a new `Lexer`.
+        :param string: The contents of the file to lex
+        """
         self.string = string
         self.idx = 0
         self.line = 0
         self.column = 0
-        self.state = State.OTHER
         self.tokenized_buffer = []
         self.lex_string()
     
     def extract_line(self) -> str:
         """
-        Extracts the next line from the string, advancing beyond the newline and discarding it
+        Extracts the next line from the string, advancing beyond the newline and discarding it/
         """
         start_idx = self.idx
         end_idx = start_idx
