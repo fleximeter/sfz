@@ -6,9 +6,6 @@ This file turns the SFZ file into a series of tokens.
 
 from enum import Enum
 
-idx = 0
-line = 0
-
 class SfzSyntaxError(SyntaxError):
     def __init__(self, msg):
         super(SfzSyntaxError, self).__init__()
@@ -20,156 +17,226 @@ class TokenType(Enum):
     HEADER = 3 # an item inside <> brackets
     KEY = 4    # a key in a key/value pair
     STRING_VALUE = 5  # the string value in a key/value pair
-    NUMBER_VALUE = 6  # the number value in a key/value pair
-    BROKEN = 7 # for tokens that don't make any sense
+    INT_VALUE = 6  # the number value in a key/value pair
+    FLOAT_VALUE = 7  # the number value in a key/value pair
+    BROKEN = 8 # for tokens that don't make any sense
 
 # Tracks the state when we parse a key/value pair
 class State(Enum):
     KEY = 1
     VALUE = 2
-    OTHER = 3
+    EQ = 3
+    OTHER = 4
 
 class Token:
-    def __init__(self, token_type: TokenType, text: str):
+    def __init__(self, token_type: TokenType, contents, line: int, column: int):
         self.token_type = token_type
-        self.lexeme = text
+        self.lexeme = contents
+        self.line = line
+        self.column = column
 
-def comment(string: str):
+class LineLexer:
     """
-    Lexes a comment
-    :param string: The string that is being lexed
-    :return: Returns the lexed token
+    We lex individual lines separately.
     """
-    global idx
-    global line
-    start_idx = idx
-    while idx < len(string):
-        if string[idx] == '\n':
-            idx += 1
-            break
-        else:
-            idx += 1
-    return Token(TokenType.COMMENT, string[start_idx:idx-1])
+    def __init__(self, string: str, line_no: int):
+        """
+        Initializes the LineLexer with a provided line of text. Note that this lexer
+        will stop lexing as soon as it notices a newline ('\n') and discard the
+        rest of the string.
+        :param string: The line of text
+        :param line_no: The line number (used in error propagation)
+        """
+        self.string = string
+        self.line_no = line_no
+        self.idx = 0
+        self.tokenized_buffer = []
+        self.lex()  # run the lexer
     
-def header(string: str):
-    """
-    Lexes a header
-    :param string: The string that is being lexed
-    :return: Returns the lexed token
-    """
-    global idx
-    global line
-    start_idx = idx
-    while idx < len(string):
-        if string[idx] == '>':
-            idx += 1
-            return Token(TokenType.HEADER, string[start_idx:idx])
-        else:
-            idx += 1
-    raise SfzSyntaxError(f"Unexpected end of file at line {line} while parsing a header tag.")
-
-def key(string: str):
-    """
-    Lexes a key in a key/value pair
-    :param string: The string that is being lexed
-    :return: Returns the lexed token
-    """
-    global idx
-    global line
-    start_idx = idx
-    while idx < len(string):
-        if string[idx] == ' ' or string[idx] == '=':
-            return Token(TokenType.KEY, string[start_idx:idx])
-        elif string[idx] == '\n':
-            raise SfzSyntaxError(f"Unexpected newline at line {line} while parsing a key in a key/value pair.")
-        else:
-            idx += 1
-    raise SfzSyntaxError(f"Unexpected end of file at line {line} while parsing a key in a key/value pair.")    
-
-def operator(string: str):
-    """
-    Lexes an operator
-    :param string: The string being lexed
-    :return: Returns the lexed token
-    """
-    global idx
-    idx += 1
-    return Token(TokenType.OPERATOR, string[idx-1])
-
-def val(string: str):
-    """
-    Lexes a value in a key/value pair
-    :param string: The string that is being lexed
-    :return: Returns the lexed token
-    """
-    global idx
-    global line
-    start_idx = idx
-    while idx < len(string):
-        if string[idx] == ' ' or string[idx] == '\n':
-            return Token(TokenType.KEY, string[start_idx:idx])
-        elif string[idx] == '=':
-            raise SfzSyntaxError(f"Unexpected operator '=' at line {line} while parsing a value in a key/value pair.")
-        else:
-            idx += 1
-    return Token(TokenType.STRING_VALUE, string[start_idx:idx])    
-
-def lex_string(string: str):
-    """
-    Lexes a provided string and returns a tokenized buffer
-    :param string: The string to lex
-    :return: A tokenized buffer
-    """
-    global idx
-    global line
-    tokenized_buf = []
-    state = State.OTHER
-
-    idx = 0
-    line = 0
-
-    while idx < len(string):
-        if string[idx] == '\n':
-            state = State.OTHER
-            line += 1
-            idx += 1
-        if string[idx] == '<':
-            state = State.OTHER
-            tokenized_buf.append(header(string))
-        elif string[idx] == '/' and peek(string, '/'):
-            state = State.OTHER
-            tokenized_buf.append(comment(string))
-        elif string[idx] == '=':
-            state = State.VALUE
-            tokenized_buf.append(operator(string))
-        # we unconditionally advance for whitespace
-        elif string[idx] == ' ':
-            idx += 1
-        elif state == State.OTHER:
-            state = State.KEY
-            tokenized_buf.append(key(string))
-        elif state == State.VALUE:
-            tokenized_buf.append(val(string))
-            state = State.OTHER        
-        # maybe we want to get rid of this eventually? is it a problem?
-        else:
-            idx += 1 
-
-    return tokenized_buf
-
-def peek(string: str, target: str) -> bool:
-    """
-    Looks at the next character in the string and checks if it's a match.
-    :param string: The string being lexed
-    :param target: The expected value of the next character
-    :returns: True or False
-    """
-    global idx
-    next_idx = idx + 1
-    if next_idx >= len(string):
-        return False
-    elif string[next_idx] != target:
-        return False
-    else:
-        return True
+    def comment(self):
+        """
+        Lexes a comment
+        """
+        start_idx = self.idx
+        while self.idx < len(self.string):
+            if self.string[self.idx] == '\n':
+                break
+            else:
+                self.idx += 1
+        comment_str = self.string[start_idx:self.idx]
+        self.idx = len(self.string)
+        self.tokenized_buffer.append(Token(TokenType.COMMENT, comment_str, self.line_no + 1, start_idx + 1))
     
+    def header(self):
+        """
+        Lexes a header token
+        """
+        start_idx = self.idx
+        while self.idx < len(self.string):
+            if self.string[self.idx] == '>':
+                self.idx += 1
+                self.tokenized_buffer.append(Token(TokenType.HEADER, self.string[start_idx:self.idx], self.line_no + 1, start_idx + 1))
+                return
+            self.idx += 1
+        raise SfzSyntaxError(f"Unexpected end of line {self.line_no + 1} while parsing a header tag.")
+    
+    def key_value(self):
+        """
+        Lexes a key/value pair. This is annoyingly complicated because string values do not need to be enclosed in quotation marks.
+        """
+        block_start_point = self.idx
+
+        # Track the start and end of the most recent word for key extraction
+        word_start = self.idx
+        word_end = -1
+
+        state = State.KEY
+
+        while self.idx < len(self.string):
+            if self.string[self.idx] == '/' and self.peek('/'):
+                self.comment()
+                return
+            elif state == State.EQ:
+                # Ignore all whitespace after an equals sign
+                if self.string[self.idx] != ' ':
+                    state = State.VALUE
+                    word_start = self.idx
+                    block_start_point = self.idx
+            else:
+                if self.string[self.idx] == '=':
+                    # If the string before the = has a separate word at the end, we pull out the beginning
+                    # of the string and make it a value.
+                    if block_start_point < word_start:
+                        self.value(self.string[block_start_point:self.idx], block_start_point)
+                    # The word right before the = is the key.
+                    self.tokenized_buffer.append(Token(TokenType.KEY, self.string[word_start:word_end], self.line_no + 1, word_start + 1))
+                    state = State.EQ
+                    self.tokenized_buffer.append(Token(TokenType.OPERATOR, self.string[self.idx], self.line_no + 1, self.idx + 1))
+            
+                # If a new word is starting, track that
+                elif self.string[self.idx] == ' ' and self.peek_is_alpha():
+                    word_start = self.idx + 1
+                # If a word is ending, track that
+                elif (self.peek(' ') or self.peek('=')) and self.string[self.idx] != ' ':
+                    word_end = self.idx + 1    
+            self.idx += 1
+        
+        # If there's a trailing value, add it in
+        if block_start_point < self.idx:
+            self.value(self.string[block_start_point:self.idx], block_start_point)
+
+    def value(self, val: str, column: int):
+        """
+        Handles values (differentiates between strings and numbers)
+        :param val: The value to handle
+        """
+        try:
+            number = int(val)
+            self.tokenized_buffer.append(Token(TokenType.INT_VALUE, number, self.line_no + 1, column + 1))
+        except Exception as _:
+            try:
+                number = float(val)
+                self.tokenized_buffer.append(Token(TokenType.FLOAT_VALUE, number, self.line_no + 1, column + 1))
+            except Exception as _:
+                self.tokenized_buffer.append(Token(TokenType.STRING_VALUE, self.string[column:self.idx], self.line_no + 1, column + 1))
+
+    def lex(self):
+        """
+        Manages the lexing process
+        """
+        while self.idx < len(self.string):
+            if self.string[self.idx] == '/' and self.peek('/'):
+                self.comment()
+            elif self.string[self.idx] == '<':
+                self.header()
+            elif self.string[self.idx] == ' ':
+                self.idx += 1
+            else:
+                self.key_value()
+
+    def peek(self, target: str) -> bool:
+        """
+        Looks at the next character in the string and checks if it's a match.
+        :param string: The string being lexed
+        :param target: The expected value of the next character
+        :returns: True or False
+        """
+        next_idx = self.idx + 1
+        if next_idx >= len(self.string):
+            return False
+        elif self.string[next_idx] != target:
+            return False
+        else:
+            return True
+        
+    def peek_is_alpha(self) -> bool:
+        """
+        Checks if the next character is alphabetical
+        """
+        next_idx = self.idx + 1
+        if next_idx >= len(self.string):
+            return False
+        elif not self.string[next_idx].isalpha():
+            return False
+        else:
+            return True
+
+    def peek_is_number(self) -> bool:
+        """
+        Checks if the next character is numeric
+        """
+        next_idx = self.idx + 1
+        if next_idx >= len(self.string):
+            return False
+        elif not self.string[next_idx].isnumeric():
+            return False
+        else:
+            return True
+
+
+class Lexer:
+    def __init__(self, string):
+        self.string = string
+        self.idx = 0
+        self.line = 0
+        self.column = 0
+        self.state = State.OTHER
+        self.tokenized_buffer = []
+        self.lex_string()
+    
+    def extract_line(self) -> str:
+        """
+        Extracts the next line from the string, advancing beyond the newline and discarding it
+        """
+        start_idx = self.idx
+        end_idx = start_idx
+        while self.idx < len(self.string):
+            # advance the position to the next line
+            if self.string[self.idx] == '\n':
+                self.idx += 1
+                self.line += 1
+                break
+            else:
+                self.idx += 1
+                end_idx = self.idx
+        return self.string[start_idx:end_idx]
+        
+    def lex_string(self):
+        """
+        Lexes a provided string and returns a tokenized buffer
+        :param string: The string to lex
+        :return: A tokenized buffer
+        """
+        self.idx = 0
+        self.line = 0
+
+        while self.idx < len(self.string):
+            # We don't allow wrapping beyond the end of a line, so we just read in a line at a time.
+            # This function also advances the index of the string buffer, so the while loop will end eventually.
+            current_line = self.extract_line()
+
+            # lex the current line and add its tokens
+            line_lexer = LineLexer(current_line, self.line)
+            self.line += 1
+            self.tokenized_buffer += line_lexer.tokenized_buffer
+                
