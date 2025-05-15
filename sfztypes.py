@@ -5,6 +5,7 @@ This file represents different operations in a SFZ file.
 """
 
 from enum import Enum
+import os
 
 class OpCodeHeader(Enum):
     """
@@ -23,6 +24,21 @@ class OpCodeHeader(Enum):
 class SfzToken:
     def __init__(self):
         pass
+
+class Include(SfzToken):
+    """
+    Represents a SFZ include path
+    """
+    def __init__(self, path: str, context_path: str):
+        """
+        Creates a new `Include`
+        :param path: The path to include
+        :param context_path: The context path for inclusion
+        """
+        super(SfzToken, self).__init__()
+        self.path = path
+        self.context_path = context_path
+        self.full_path = os.path.join(context_path, path)
 
 class Header(SfzToken):
     """

@@ -12,11 +12,11 @@ if __name__ == "__main__":
     with open(FILE, 'r') as sfz_file:
         contents = sfz_file.read()
     lex = lexer.Lexer(contents)
+    parse = parser.Parser(lex, FILE)
     # for i in range(200):
     #     print(f"{lex.tokenized_buffer[i].token_type} \"{lex.tokenized_buffer[i].lexeme}\"")
-    data = parser.parse(lex.tokenized_buffer)
     for i in range(50, 55):
-        print(data[i].header)
-        print(data[i].attributes)
+        print(parse.parsed_buf[i].header)
+        print(parse.parsed_buf[i].attributes)
         print()
     

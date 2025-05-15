@@ -18,14 +18,15 @@ class TokenType(Enum):
     """
     Represents different kinds of tokens in a SFZ file
     """
-    COMMENT = 1 # comments start with //
-    OPERATOR = 2 # generally just the = operator
-    HEADER = 3 # an item inside <> brackets
-    KEY = 4    # a key in a key/value pair
-    STRING_VALUE = 5  # the string value in a key/value pair
-    INT_VALUE = 6  # the number value in a key/value pair
-    FLOAT_VALUE = 7  # the number value in a key/value pair
-    BROKEN = 8 # for tokens that don't make any sense
+    COMMENT = 1       # comments start with //
+    INCLUDE = 2       # for including other SFZ files
+    OPERATOR = 3      # generally just the = operator
+    HEADER = 4        # an item inside <> brackets
+    KEY = 5           # a key in a key/value pair
+    STRING_VALUE = 6  # the string value in a key/value pair
+    INT_VALUE = 7     # the number value in a key/value pair
+    FLOAT_VALUE = 8   # the number value in a key/value pair
+    BROKEN = 9        # for tokens that don't make any sense
 
 # Tracks the state when we parse a key/value pair
 class State(Enum):
@@ -109,6 +110,8 @@ class LineLexer:
 
         while self.idx < len(self.string):
             if self.string[self.idx] == '/' and self.peek('/'):
+                # If there's a trailing value, add it in
+                self.value(self.string[block_start_point:self.idx], block_start_point)
                 self.comment()
                 return
             elif state == State.EQ:
@@ -156,6 +159,41 @@ class LineLexer:
             except Exception as _:
                 self.tokenized_buffer.append(Token(TokenType.STRING_VALUE, val, self.line_no + 1, column + 1))
 
+    def include(self):
+        """
+        Manages include macros
+        """
+        # Get the include macro
+        start_idx = self.idx
+        while self.idx < len(self.string):
+            if self.string[self.idx] != ' ':
+                self.idx += 1
+            else:
+                break
+        self.tokenized_buffer.append(Token(TokenType.INCLUDE, self.string[start_idx:self.idx], self.line_no + 1, start_idx + 1))
+
+        # Get the trailing string
+        while self.idx < len(self.string):
+            if self.string[self.idx] == ' ':
+                self.idx += 1
+            elif self.string[self.idx] == '\"':
+                self.idx += 1
+                break
+            else:
+                raise SfzSyntaxError(f"Missing include path after #include at line {self.line_no + 1}, column {self.idx + 1}")
+        
+        start_str_idx = self.idx
+
+        while self.idx < len(self.string):
+            if self.string[self.idx] == '\"':
+                self.tokenized_buffer.append(Token(TokenType.STRING_VALUE, self.string[start_str_idx:self.idx], self.line_no + 1, start_str_idx - 1))
+                self.idx += 1
+                return
+            else:
+                self.idx += 1
+
+        raise SfzSyntaxError(f"Incorrectly formatted include path after #include at line {self.line_no + 1}, column {start_str_idx}")
+
     def lex(self):
         """
         Manages the lexing process
@@ -165,6 +203,8 @@ class LineLexer:
                 self.comment()
             elif self.string[self.idx] == '<':
                 self.header()
+            elif self.string[self.idx] == '#':
+                self.include()
             elif self.string[self.idx] == ' ':
                 self.idx += 1
             else:
@@ -261,6 +301,5 @@ class Lexer:
 
             # lex the current line and add its tokens
             line_lexer = LineLexer(current_line, self.line)
-            self.line += 1
             self.tokenized_buffer += line_lexer.tokenized_buffer
                 

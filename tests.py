@@ -7,15 +7,39 @@ Contains tests to run on the SFZ code.
 import lexer
 import parser
 import os
+import re
+import sfztypes
+
+SFZ = re.compile(r"\.sfz$", re.IGNORECASE)
+GREEN = "\033[92m"
+END_COLOR = "\033[0m"
 
 def test_batch_for_crashes(path):
+    """
+    Exhaustively tests all SFZ sample files in a directory
+    :path: The directory to test
+    """
     for dir, _, files in os.walk(path):
         for file in files:
-            print("Testing", os.path.join(dir, file))
-            with open(os.path.join(dir, file), 'r') as sfz_file:
-                contents = sfz_file.read()
-            lexed = lexer.Lexer(contents)
-            parsed = parser.parse(lexed.tokenized_buffer)
+            if SFZ.search(file):
+                full_path = os.path.join(dir, file)
+                # print(full_path)
+                print("Testing", full_path)
+                with open(full_path, 'r') as sfz_file:
+                    contents = sfz_file.read()
+                lex = lexer.Lexer(contents)
+                parse = parser.Parser(lex, dir)
+                for item in parse.parsed_buf:
+                    # Check that all samples can be accessed
+                    if "sample" in item.attributes:
+                        if not os.path.exists(os.path.join(parse.source_file_path, item.attributes["sample"])):
+                            raise FileNotFoundError(f"The sample \"{item.attributes['sample']}\" in file \"{file}\" cannot be found.")
+                    # Check that all include files can be accessed
+                    if type(item) == sfztypes.Include:
+                        if not os.path.exists(item.full_path):
+                            raise FileNotFoundError(f"The SFZ include file \"{item.path}\" in file \"{file}\" cannot be found.")
 
 if __name__ == "__main__":
-    test_batch_for_crashes("sample_files")
+    TEST_PATH = "D:\\Recording\\sfz"
+    test_batch_for_crashes(TEST_PATH)
+    print(GREEN + "All tests passed." + END_COLOR)
