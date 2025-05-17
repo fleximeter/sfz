@@ -4,9 +4,10 @@ File: tests.py
 Contains tests to run on the SFZ code.
 """
 
+import jsonifier
 import lexer
-import parser
 import os
+import parser
 import re
 import sfztypes
 
@@ -29,15 +30,20 @@ def test_batch_for_crashes(path):
                     contents = sfz_file.read()
                 lex = lexer.Lexer(contents)
                 parse = parser.Parser(lex, dir)
+                # Check that all include files can be accessed
                 for item in parse.parsed_buf:
-                    # Check that all samples can be accessed
-                    if "sample" in item.attributes:
-                        if not os.path.exists(os.path.join(parse.source_file_path, item.attributes["sample"])):
-                            raise FileNotFoundError(f"The sample \"{item.attributes['sample']}\" in file \"{file}\" cannot be found.")
-                    # Check that all include files can be accessed
                     if type(item) == sfztypes.Include:
                         if not os.path.exists(item.full_path):
                             raise FileNotFoundError(f"The SFZ include file \"{item.path}\" in file \"{file}\" cannot be found.")
+                        
+                sample_groups = jsonifier.make_sample_dictionary(parse)
+                # Check that all samples can be accessed
+                for group in sample_groups:
+                    for sample_arr in group:
+                        for sample in sample_arr:
+                            if "sample" in sample:
+                                if not os.path.exists(os.path.join(parse.source_file_path, sample["sample"])):
+                                   raise FileNotFoundError(f"The sample \"{sample['sample']}\" in file \"{file}\" cannot be found.")
 
 if __name__ == "__main__":
     TEST_PATH = "D:\\Recording\\sfz"

@@ -19,7 +19,6 @@ class Parser:
         self.lexer = lexer
         self.source_file_path = source_file_path
         self.parsed_buf = self.parse()
-        self.resolve_paths()
 
     def parse(self) -> list:
         """
@@ -82,18 +81,3 @@ class Parser:
                 else:
                     current_header.add_attribute(self.lexer.tokenized_buffer[i-2].lexeme, token.lexeme)
         return parsed_buf
-
-    def resolve_paths(self):
-        """
-        Resolves paths for samples in a second parsing path
-        """
-        current_default_path = ""
-
-        for entry in self.parsed_buf:
-            if type(entry) == sfztypes.Header:
-                if entry.header == sfztypes.OpCodeHeader.CONTROL:
-                    if "default_path" in entry.attributes:
-                        current_default_path = entry.attributes["default_path"]
-                elif entry.header == sfztypes.OpCodeHeader.REGION:
-                    if "sample" in entry.attributes:
-                        entry.attributes["sample"] = os.path.join(current_default_path, entry.attributes["sample"])

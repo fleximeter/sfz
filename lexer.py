@@ -138,7 +138,7 @@ class LineLexer:
                     state = State.EQ
                     self.tokenized_buffer.append(Token(TokenType.OPERATOR, self.string[self.idx], self.line_no + 1, self.idx + 1))
             
-                self.idx += 1
+            self.idx += 1
         
         # If there's a trailing value, add it in
         if block_start_point < self.idx:

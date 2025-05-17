@@ -4,19 +4,19 @@ File: main.py
 This file runs the parser.
 """
 
+import jsonifier
 import lexer
 import parser
 
 if __name__ == "__main__":
-    FILE = "sample_files/Northern Trumpets_BreathContr_1.1.sfz"
+    FILE = "D:\\Recording\\sfz\\Northern Trumpets SFZ_1.1\\Northern Trumpets SFZ_1.1\\Northern Trumpets_BreathContr_1.1.sfz"
     with open(FILE, 'r') as sfz_file:
         contents = sfz_file.read()
     lex = lexer.Lexer(contents)
     parse = parser.Parser(lex, FILE)
-    # for i in range(200):
-    #     print(f"{lex.tokenized_buffer[i].token_type} \"{lex.tokenized_buffer[i].lexeme}\"")
-    for i in range(50, 55):
-        print(parse.parsed_buf[i].header)
-        print(parse.parsed_buf[i].attributes)
+
+    sample_groups = jsonifier.make_sample_dictionary(parse)
+    for entry in sample_groups["Harmon Fast"][91]:
+        print(entry)
         print()
     
