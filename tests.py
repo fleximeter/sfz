@@ -29,7 +29,7 @@ def test_batch_for_crashes(path):
                 with open(full_path, 'r') as sfz_file:
                     contents = sfz_file.read()
                 lex = lexer.Lexer(contents)
-                parse = parser.Parser(lex, dir)
+                parse = parser.Parser(lex)
                 # Check that all include files can be accessed
                 for item in parse.parsed_buf:
                     if type(item) == sfztypes.Include:

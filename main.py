@@ -13,7 +13,7 @@ if __name__ == "__main__":
     with open(FILE, 'r') as sfz_file:
         contents = sfz_file.read()
     lex = lexer.Lexer(contents)
-    parse = parser.Parser(lex, FILE)
+    parse = parser.Parser(lex)
 
     sample_groups = jsonifier.make_sample_dictionary(parse)
     for entry in sample_groups["Harmon Fast"][91]:

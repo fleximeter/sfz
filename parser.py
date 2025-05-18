@@ -4,20 +4,16 @@ File: parser.py
 This file turns a lexed buffer into something more manageable.
 """
 
-from enum import Enum
 from lexer import SfzSyntaxError, TokenType, Lexer
-import os
 import sfztypes
 
 class Parser:
-    def __init__(self, lexer: Lexer, source_file_path: str):
+    def __init__(self, lexer: Lexer):
         """
         Initializes the parser and parses the tokenized buffer in the lexer
         :param lexer: The lexer containing the tokenized buffer
-        :param source_file_path: The path to the source code file (used to resolve include macros)
         """
         self.lexer = lexer
-        self.source_file_path = source_file_path
         self.parsed_buf = self.parse()
 
     def parse(self) -> list:
