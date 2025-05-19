@@ -21,10 +21,10 @@ class Parser:
         A simple parser for a tokenized buffer
         """
         parsed_buf = []
-        current_header = None
+        current_header = sfztypes.Header(sfztypes.OpCodeHeader.NO_HEADER)
         for i, token in enumerate(self.lexer.tokenized_buffer):
             if token.token_type == TokenType.HEADER:
-                if current_header is not None:
+                if current_header.header != sfztypes.OpCodeHeader.NO_HEADER or len(current_header.attributes) > 0:
                     parsed_buf.append(current_header)
                 if token.lexeme == "<region>":
                     current_header = sfztypes.Header(sfztypes.OpCodeHeader.REGION)

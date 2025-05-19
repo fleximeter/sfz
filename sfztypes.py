@@ -10,16 +10,18 @@ import os
 class OpCodeHeader(Enum):
     """
     Represents the different SFZ headers.
+    In some cases, there is no header, so the NO_HEADER opcode is provided for this.
     """
-    REGION = 1
-    GROUP = 2
-    CONTROL = 3
-    GLOBAL = 4
-    CURVE = 5
-    EFFECT = 6
-    MASTER = 7
-    MIDI = 8
-    SAMPLE = 9
+    NO_HEADER = 1
+    REGION = 2
+    GROUP = 3
+    CONTROL = 4
+    GLOBAL = 5
+    CURVE = 6
+    EFFECT = 7
+    MASTER = 8
+    MIDI = 9
+    SAMPLE = 10
 
 class SfzToken:
     def __init__(self):
@@ -39,6 +41,20 @@ class Include(SfzToken):
         self.path = path
         self.context_path = context_path
         self.full_path = os.path.join(context_path, path)
+
+class Define(SfzToken):
+    """
+    Represents a SFZ define macro
+    """
+    def __init__(self, name: str, value):
+        """
+        Creates a new `Define` macro binding
+        :param name: The name of the definition
+        :param value: The associated value
+        """
+        super(SfzToken, self).__init__()
+        self.name = name
+        self.value = value
 
 class Header(SfzToken):
     """

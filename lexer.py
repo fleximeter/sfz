@@ -20,13 +20,14 @@ class TokenType(Enum):
     """
     COMMENT = 1       # comments start with //
     INCLUDE = 2       # for including other SFZ files
-    OPERATOR = 3      # generally just the = operator
-    HEADER = 4        # an item inside <> brackets
-    KEY = 5           # a key in a key/value pair
-    STRING_VALUE = 6  # the string value in a key/value pair
-    INT_VALUE = 7     # the number value in a key/value pair
-    FLOAT_VALUE = 8   # the number value in a key/value pair
-    BROKEN = 9        # for tokens that don't make any sense
+    DEFINE = 3        # for #define bindings
+    OPERATOR = 4      # generally just the = operator
+    HEADER = 5        # an item inside <> brackets
+    KEY = 6           # a key in a key/value pair
+    STRING_VALUE = 7  # the string value in a key/value pair
+    INT_VALUE = 8     # the number value in a key/value pair
+    FLOAT_VALUE = 9   # the number value in a key/value pair
+    BROKEN = 10       # for tokens that don't make any sense
 
 # Tracks the state when we parse a key/value pair
 class State(Enum):
@@ -55,18 +56,22 @@ class LineLexer:
     A lexer for individual lines in a file. The `Lexer` class extracts lines
     and runs them through instances of this class.
     """
-    def __init__(self, string: str, line_no: int):
+    def __init__(self, string: str, line_no: int, recursive=False, path=""):
         """
         Initializes the LineLexer with a provided line of text. Note that this lexer
         will stop lexing as soon as it notices a newline ('\n') and discard the
         rest of the string.
         :param string: The line of text
         :param line_no: The line number (used in error propagation)
+        :param recursive: If True, recursively lexes macro-included SFZ files.
+        :param path: The path of the current SFZ file (required for recursive evaluation)
         """
         self.string = string
         self.line_no = line_no
         self.idx = 0
         self.tokenized_buffer = []
+        self.recursive = recursive
+        self.path = path
         self.lex()  # run the lexer
     
     def comment(self):
@@ -94,7 +99,7 @@ class LineLexer:
                 self.tokenized_buffer.append(Token(TokenType.HEADER, self.string[start_idx:self.idx], self.line_no + 1, start_idx + 1))
                 return
             self.idx += 1
-        raise SfzSyntaxError(f"Unexpected end of line {self.line_no + 1} while parsing a header tag.")
+        raise SfzSyntaxError(f"Unexpected end of line {self.line_no + 1} while parsing a header tag in file \"{self.path}\"")
     
     def key_value(self):
         """
@@ -159,9 +164,9 @@ class LineLexer:
             except Exception as _:
                 self.tokenized_buffer.append(Token(TokenType.STRING_VALUE, val, self.line_no + 1, column + 1))
 
-    def include(self):
+    def macro(self):
         """
-        Manages include macros
+        Manages macros
         """
         # Get the include macro
         start_idx = self.idx
@@ -170,29 +175,44 @@ class LineLexer:
                 self.idx += 1
             else:
                 break
-        self.tokenized_buffer.append(Token(TokenType.INCLUDE, self.string[start_idx:self.idx], self.line_no + 1, start_idx + 1))
+        macro_lexeme = self.string[start_idx:self.idx]
 
-        # Get the trailing string
-        while self.idx < len(self.string):
-            if self.string[self.idx] == ' ':
-                self.idx += 1
-            elif self.string[self.idx] == '\"':
-                self.idx += 1
-                break
-            else:
-                raise SfzSyntaxError(f"Missing include path after #include at line {self.line_no + 1}, column {self.idx + 1}")
+        # handle #include macros
+        if macro_lexeme == "#include":
+            self.tokenized_buffer.append(Token(TokenType.INCLUDE, macro_lexeme, self.line_no + 1, start_idx + 1))
+
+            # Get the trailing string
+            while self.idx < len(self.string):
+                if self.string[self.idx] == ' ':
+                    self.idx += 1
+                elif self.string[self.idx] == '\"':
+                    self.idx += 1
+                    break
+                else:
+                    raise SfzSyntaxError(f"Missing include path after #include at line {self.line_no + 1}, column {self.idx + 1}, file \"{self.path}\"")
+            
+            start_str_idx = self.idx
+
+            while self.idx < len(self.string):
+                if self.string[self.idx] == '\"':
+                    include_path = self.string[start_str_idx:self.idx]
+                    self.tokenized_buffer.append(Token(TokenType.STRING_VALUE, include_path, self.line_no + 1, start_str_idx - 1))
+                    self.idx += 1
+                    return
+                else:
+                    self.idx += 1
+
+            raise SfzSyntaxError(f"Incorrectly formatted include path after #include at line {self.line_no + 1}, column {start_str_idx}, file \"{self.path}\"")
         
-        start_str_idx = self.idx
+        # handle #define macros
+        elif macro_lexeme == "#define":
+            self.tokenized_buffer.append(Token(TokenType.DEFINE, macro_lexeme, self.line_no + 1, start_idx + 1))
+            # flesh this out later, for now just ignore the value
+            self.idx = len(self.string)
 
-        while self.idx < len(self.string):
-            if self.string[self.idx] == '\"':
-                self.tokenized_buffer.append(Token(TokenType.STRING_VALUE, self.string[start_str_idx:self.idx], self.line_no + 1, start_str_idx - 1))
-                self.idx += 1
-                return
-            else:
-                self.idx += 1
+        else:
+            raise SfzSyntaxError(f"Unrecognized macro \"{macro_lexeme}\" at line {self.line_no + 1}, column {start_str_idx}, file \"{self.path}\"")
 
-        raise SfzSyntaxError(f"Incorrectly formatted include path after #include at line {self.line_no + 1}, column {start_str_idx}")
 
     def lex(self):
         """
@@ -204,8 +224,8 @@ class LineLexer:
             elif self.string[self.idx] == '<':
                 self.header()
             elif self.string[self.idx] == '#':
-                self.include()
-            elif self.string[self.idx] == ' ':
+                self.macro()
+            elif self.string[self.idx].isspace():
                 self.idx += 1
             else:
                 self.key_value()
@@ -256,16 +276,20 @@ class Lexer:
     The lexing happens automatically on construction, and the results are found
     in `self.tokenized_buffer`.
     """
-    def __init__(self, string):
+    def __init__(self, string, recursive=False, path=""):
         """
         Creates a new `Lexer`.
         :param string: The contents of the file to lex
+        :param recursive: If True, recursively lexes macro-included SFZ files.
+        :param path: The path of the SFZ file (required for recursive evaluation)
         """
         self.string = string
         self.idx = 0
         self.line = 0
         self.column = 0
+        self.path = path
         self.tokenized_buffer = []
+        self.recursive = recursive
         self.lex_string()
     
     def extract_line(self) -> str:
@@ -300,6 +324,6 @@ class Lexer:
             current_line = self.extract_line()
 
             # lex the current line and add its tokens
-            line_lexer = LineLexer(current_line, self.line)
+            line_lexer = LineLexer(current_line, self.line, self.recursive, self.path)
             self.tokenized_buffer += line_lexer.tokenized_buffer
                 
