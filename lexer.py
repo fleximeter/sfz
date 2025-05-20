@@ -122,19 +122,13 @@ class LineLexer:
                 return
             elif state == State.EQ:
                 # Ignore all whitespace after an equals sign
-                if self.string[self.idx] != ' ':
+                if not self.string[self.idx].isspace():
                     state = State.VALUE
                     word_start = self.idx
                     block_start_point = self.idx
             else:
-                # If a new word is starting, track that
-                if self.string[self.idx] == ' ' and self.peek_is_alpha():
-                    word_start = self.idx + 1
-                # If a word is ending, track that
-                elif (self.peek(' ') or self.peek('=')) and self.string[self.idx] != ' ':
-                    word_end = self.idx + 1    
                 # If we hit an =
-                elif self.string[self.idx] == '=':
+                if self.string[self.idx] == '=':
                     # If the string before the = has a separate word at the end, we pull out the beginning
                     # of the string and make it a value.
                     if block_start_point < word_start:
@@ -144,6 +138,12 @@ class LineLexer:
                     state = State.EQ
                     self.tokenized_buffer.append(Token(TokenType.OPERATOR, self.string[self.idx], self.line_no + 1, self.idx + 1, self.path))
             
+                # If a new word is starting, track that
+                elif self.string[self.idx] == ' ' and self.peek_is_alpha():
+                    word_start = self.idx + 1
+                # If a word is ending, track that
+                elif self.string[self.idx] != ' ' and (self.peek(' ') or self.peek('=')):
+                    word_end = self.idx + 1    
             self.idx += 1
         
         # If there's a trailing value, add it in
@@ -324,4 +324,3 @@ class Lexer:
             # lex the current line and add its tokens
             line_lexer = LineLexer(current_line, self.line, self.path)
             self.tokenized_buffer += line_lexer.tokenized_buffer
-                

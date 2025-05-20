@@ -82,10 +82,9 @@ class Preprocessor:
         while self.i < len(self.sfz_contents):
             # we can only have a macro definition if the # occurs as the first character
             # in the line or right after whitespace at the start of the line
-            if self.sfz_contents[self.i] == '#' and self.sfz_contents[self.last_newline+1:self.i-1].isspace():
+            if self.sfz_contents[self.i] == '#' and \
+                (self.sfz_contents[self.last_newline+1:self.i-1].isspace() or self.i - self.last_newline == 1 or self.i == 0):
                 self.macrodef()
-            elif self.sfz_contents[self.i] == '#' and self.i - self.last_newline == 1:
-                self.macrodef()  
             elif self.sfz_contents[self.i] == '$':
                 self.substitute()
             else:
@@ -161,6 +160,7 @@ class Preprocessor:
         # read the rest of the line
         while self.i < len(self.sfz_contents):
             if self.sfz_contents[self.i] == '\n':
+                self.last_newline = self.i
                 self.i += 1
                 break
             elif not self.sfz_contents[self.i].isspace():
