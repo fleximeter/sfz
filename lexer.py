@@ -5,6 +5,7 @@ This file turns the SFZ file into a series of tokens.
 """
 
 from enum import Enum
+from preprocessor import SourceFileFragment
 
 class SfzSyntaxError(SyntaxError):
     """
@@ -38,18 +39,20 @@ class Token:
     """
     Represents a single token in a SFZ file
     """
-    def __init__(self, token_type: TokenType, contents, line: int, column: int):
+    def __init__(self, token_type: TokenType, contents, line: int, column: int, path: str):
         """
         Creates a new `Token`, given the contents, location, and `TokenType`.
         :param token_type: The `TokenType` of the token
         :param contents: The string representation of the token in the file
         :param line: The 1-based line number
         :param column: The 1-based column number
+        :param path: The path of the file containing the token
         """
         self.token_type = token_type
         self.lexeme = contents
         self.line = line
         self.column = column
+        self.path = path
 
 class LineLexer:
     """
@@ -86,7 +89,7 @@ class LineLexer:
                 self.idx += 1
         comment_str = self.string[start_idx:self.idx]
         self.idx = len(self.string)
-        self.tokenized_buffer.append(Token(TokenType.COMMENT, comment_str, self.line_no + 1, start_idx + 1))
+        self.tokenized_buffer.append(Token(TokenType.COMMENT, comment_str, self.line_no + 1, start_idx + 1, self.path))
     
     def header(self):
         """
@@ -96,7 +99,7 @@ class LineLexer:
         while self.idx < len(self.string):
             if self.string[self.idx] == '>':
                 self.idx += 1
-                self.tokenized_buffer.append(Token(TokenType.HEADER, self.string[start_idx:self.idx], self.line_no + 1, start_idx + 1))
+                self.tokenized_buffer.append(Token(TokenType.HEADER, self.string[start_idx:self.idx], self.line_no + 1, start_idx + 1, self.path))
                 return
             self.idx += 1
         raise SfzSyntaxError(f"Unexpected end of line {self.line_no + 1} while parsing a header tag in file \"{self.path}\"")
@@ -139,9 +142,9 @@ class LineLexer:
                     if block_start_point < word_start:
                         self.value(self.string[block_start_point:word_start-1], block_start_point)
                     # The word right before the = is the key.
-                    self.tokenized_buffer.append(Token(TokenType.KEY, self.string[word_start:word_end], self.line_no + 1, word_start + 1))
+                    self.tokenized_buffer.append(Token(TokenType.KEY, self.string[word_start:word_end], self.line_no + 1, word_start + 1, self.path))
                     state = State.EQ
-                    self.tokenized_buffer.append(Token(TokenType.OPERATOR, self.string[self.idx], self.line_no + 1, self.idx + 1))
+                    self.tokenized_buffer.append(Token(TokenType.OPERATOR, self.string[self.idx], self.line_no + 1, self.idx + 1, self.path))
             
             self.idx += 1
         
@@ -156,13 +159,13 @@ class LineLexer:
         """
         try:
             number = int(val)
-            self.tokenized_buffer.append(Token(TokenType.INT_VALUE, number, self.line_no + 1, column + 1))
+            self.tokenized_buffer.append(Token(TokenType.INT_VALUE, number, self.line_no + 1, column + 1, self.path))
         except Exception as _:
             try:
                 number = float(val)
-                self.tokenized_buffer.append(Token(TokenType.FLOAT_VALUE, number, self.line_no + 1, column + 1))
+                self.tokenized_buffer.append(Token(TokenType.FLOAT_VALUE, number, self.line_no + 1, column + 1, self.path))
             except Exception as _:
-                self.tokenized_buffer.append(Token(TokenType.STRING_VALUE, val, self.line_no + 1, column + 1))
+                self.tokenized_buffer.append(Token(TokenType.STRING_VALUE, val, self.line_no + 1, column + 1, self.path))
 
     def macro(self):
         """
@@ -179,7 +182,7 @@ class LineLexer:
 
         # handle #include macros
         if macro_lexeme == "#include":
-            self.tokenized_buffer.append(Token(TokenType.INCLUDE, macro_lexeme, self.line_no + 1, start_idx + 1))
+            self.tokenized_buffer.append(Token(TokenType.INCLUDE, macro_lexeme, self.line_no + 1, start_idx + 1, self.path))
 
             # Get the trailing string
             while self.idx < len(self.string):
@@ -196,7 +199,7 @@ class LineLexer:
             while self.idx < len(self.string):
                 if self.string[self.idx] == '\"':
                     include_path = self.string[start_str_idx:self.idx]
-                    self.tokenized_buffer.append(Token(TokenType.STRING_VALUE, include_path, self.line_no + 1, start_str_idx - 1))
+                    self.tokenized_buffer.append(Token(TokenType.STRING_VALUE, include_path, self.line_no + 1, start_str_idx - 1, self.path))
                     self.idx += 1
                     return
                 else:
@@ -206,7 +209,7 @@ class LineLexer:
         
         # handle #define macros
         elif macro_lexeme == "#define":
-            self.tokenized_buffer.append(Token(TokenType.DEFINE, macro_lexeme, self.line_no + 1, start_idx + 1))
+            self.tokenized_buffer.append(Token(TokenType.DEFINE, macro_lexeme, self.line_no + 1, start_idx + 1, self.path))
             # flesh this out later, for now just ignore the value
             self.idx = len(self.string)
 
@@ -276,20 +279,17 @@ class Lexer:
     The lexing happens automatically on construction, and the results are found
     in `self.tokenized_buffer`.
     """
-    def __init__(self, string, recursive=False, path=""):
+    def __init__(self, frag: SourceFileFragment):
         """
         Creates a new `Lexer`.
-        :param string: The contents of the file to lex
-        :param recursive: If True, recursively lexes macro-included SFZ files.
-        :param path: The path of the SFZ file (required for recursive evaluation)
+        :param frag: The source file fragment to lex
         """
-        self.string = string
+        self.string = frag.contents
         self.idx = 0
-        self.line = 0
+        self.line = frag.starting_line_number
         self.column = 0
-        self.path = path
+        self.path = frag.path
         self.tokenized_buffer = []
-        self.recursive = recursive
         self.lex_string()
     
     def extract_line(self) -> str:

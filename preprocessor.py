@@ -247,7 +247,8 @@ class Preprocessor:
                 break
             else:
                 self.i += 1
-
+                value_end_idx = self.i
+                
         if value_start_idx >= value_end_idx:
             raise SfzPreprocessorError(f"Improperly formatted value in file \"{self.path}\" at line {self.line+1} after #define macro definition.")
 

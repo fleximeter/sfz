@@ -7,6 +7,7 @@ This file runs the parser.
 import jsonifier
 import lexer
 import parser
+import preprocessor
 
 if __name__ == "__main__":
     FILE = "D:\\Recording\\sfz\\Northern Trumpets SFZ_1.1\\Northern Trumpets SFZ_1.1\\Northern Trumpets_BreathContr_1.1.sfz"
