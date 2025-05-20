@@ -53,6 +53,7 @@ class Preprocessor:
         self.i = 0
         self.line = 0
         self.starting_line = 0
+        self.last_newline = -1  # tracks the index of the last newline
         if "path" in kwargs:
             self.path = kwargs["path"]
         else:
@@ -79,14 +80,19 @@ class Preprocessor:
         Manages the preprocessing.
         """
         while self.i < len(self.sfz_contents):
-            if self.sfz_contents[self.i] == '#':
+            # we can only have a macro definition if the # occurs as the first character
+            # in the line or right after whitespace at the start of the line
+            if self.sfz_contents[self.i] == '#' and self.sfz_contents[self.last_newline+1:self.i-1].isspace():
                 self.macrodef()
+            elif self.sfz_contents[self.i] == '#' and self.i - self.last_newline == 1:
+                self.macrodef()  
             elif self.sfz_contents[self.i] == '$':
                 self.substitute()
             else:
                 self.preprocessed_contents.write(self.sfz_contents[self.i])
                 if self.sfz_contents[self.i] == '\n':
                     self.line += 1
+                    self.last_newline = self.i
                 self.i += 1
 
         # When the file is completely processed, check to see if there is any processed source code to
@@ -267,7 +273,7 @@ class Preprocessor:
         LENGTH=50
         idx = self.i + 1
         candidate_key = ""
-        while idx < len(self.sfz_contents) and idx - self.i < LENGTH and self.sfz_contents[idx] != "\n":
+        while idx < len(self.sfz_contents) and idx - self.i < LENGTH and not self.sfz_contents[idx].isspace():
             candidate_key = self.sfz_contents[self.i:idx]
             if candidate_key in self.bindings:
                 self.preprocessed_contents.write(self.bindings[candidate_key])

@@ -13,10 +13,14 @@ import lexer
 import parser
 
 FILE = "my file path"
-with open(FILE, 'r') as sfz_file:
+with open(full_path, 'r') as sfz_file:
     contents = sfz_file.read()
-lex = lexer.Lexer(contents)
-parse = parser.Parser(lex, FILE)
+pp = preprocessor.Preprocessor(contents, path=full_path)
+tokenized_buffer = []
+for frag in pp.retrieve():
+    lex = lexer.Lexer(frag)
+    tokenized_buffer += lex.tokenized_buffer
+parse = parser.Parser(tokenized_buffer)
 sample_dict = jsonifier.make_sample_dictionary(parse)
 ```
 

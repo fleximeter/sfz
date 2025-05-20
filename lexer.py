@@ -59,21 +59,19 @@ class LineLexer:
     A lexer for individual lines in a file. The `Lexer` class extracts lines
     and runs them through instances of this class.
     """
-    def __init__(self, string: str, line_no: int, recursive=False, path=""):
+    def __init__(self, string: str, line_no: int, path=""):
         """
         Initializes the LineLexer with a provided line of text. Note that this lexer
         will stop lexing as soon as it notices a newline ('\n') and discard the
         rest of the string.
         :param string: The line of text
         :param line_no: The line number (used in error propagation)
-        :param recursive: If True, recursively lexes macro-included SFZ files.
-        :param path: The path of the current SFZ file (required for recursive evaluation)
+        :param path: The path of the current SFZ file
         """
         self.string = string
         self.line_no = line_no
         self.idx = 0
         self.tokenized_buffer = []
-        self.recursive = recursive
         self.path = path
         self.lex()  # run the lexer
     
@@ -324,6 +322,6 @@ class Lexer:
             current_line = self.extract_line()
 
             # lex the current line and add its tokens
-            line_lexer = LineLexer(current_line, self.line, self.recursive, self.path)
+            line_lexer = LineLexer(current_line, self.line, self.path)
             self.tokenized_buffer += line_lexer.tokenized_buffer
                 
