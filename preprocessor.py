@@ -8,6 +8,21 @@ from io import StringIO
 import os
 import pathlib
 
+class SourceFileFragment:
+    """
+    Represents a fragment of a source code file. This is used to avoid line number discrepancies at #include tokens.
+    """
+    def __init__(self, contents: str, path: str, starting_line_number: int):
+        """
+        Creates a SourceFileFragment
+        :param contents: The contents of the source code file portion
+        :param path: The path to the source code file
+        :param starting_line_number: The starting line number of the fragment
+        """
+        self.contents = contents
+        self.path = path
+        self.starting_line_number = starting_line_number
+
 class SfzPreprocessorError(SyntaxError):
     """
     Represents a preprocessor error in a SFZ file
@@ -19,6 +34,12 @@ class SfzPreprocessorError(SyntaxError):
 class Preprocessor:
     """
     Manages the preprocessing step for a SFZ file, before the lexing step.
+    The preprocessor generates a list of SourceFileFragments. Each SourceFileFragment
+    tells you which file it came from and what the starting line number is.
+    This is done so that we can include #include files and still report syntax
+    errors with line numbers and file locations effectively.
+    The workflow for parsing a SFZ file is to first run the preprocessor, then
+    dump the source file fragments through the lexer, then run the parser.
     """
     def __init__(self, sfz_contents, **kwargs):
         """
@@ -30,6 +51,8 @@ class Preprocessor:
         """
         self.sfz_contents = sfz_contents
         self.i = 0
+        self.line = 0
+        self.starting_line = 0
         if "path" in kwargs:
             self.path = kwargs["path"]
         else:
@@ -38,10 +61,18 @@ class Preprocessor:
             self.bindings = kwargs["bindings"].copy()
         else:
             self.bindings = {}
+        self.source_file_fragments = []
         self.preprocessed_contents = StringIO()
         self.process()
         self.preprocessed_contents.seek(0)
         self.preprocessed_contents = self.preprocessed_contents.read()
+
+    def retrieve(self):
+        """
+        Retrieves the preprocessed SFZ code
+        :return: A list of SourceFileFragments
+        """
+        return self.source_file_fragments
 
     def process(self):
         """
@@ -54,7 +85,16 @@ class Preprocessor:
                 self.substitute()
             else:
                 self.preprocessed_contents.write(self.sfz_contents[self.i])
+                if self.sfz_contents[self.i] == '\n':
+                    self.line += 1
                 self.i += 1
+
+        # When the file is completely processed, check to see if there is any processed source code to
+        # add to the list of SourceFileFragments. If so, add the last fragment.
+        self.preprocessed_contents.seek(0)
+        processed_contents = self.preprocessed_contents.read()
+        if len(processed_contents) > 0:
+            self.source_file_fragments.append(SourceFileFragment(processed_contents, self.path, self.starting_line))
 
     def macrodef(self):
         """
@@ -63,7 +103,7 @@ class Preprocessor:
         LIMIT = 20
         idx = self.i + 1
         while idx < len(self.sfz_contents) and idx - self.i < LIMIT:
-            if self.sfz_contents[idx] == ' ' or self.sfz_contents[idx] == '\t':
+            if self.sfz_contents[idx].isspace():
                 break
             idx += 1
         substr = self.sfz_contents[self.i:idx]
@@ -76,7 +116,7 @@ class Preprocessor:
             self.i = idx
             self.define()
         else:
-            raise SfzPreprocessorError(f"Unknown macro \"{substr}\" in file {self.path} at index {self.i}.")
+            raise SfzPreprocessorError(f"Unknown macro \"{substr}\" in file \"{self.path}\" at line {self.line+1}.")
 
     def include(self):
         """
@@ -95,7 +135,7 @@ class Preprocessor:
                 self.i += 1
                 break
             elif self.sfz_contents[self.i] != ' ' and self.sfz_contents[self.i] != '\t':
-                raise SfzPreprocessorError(f"Unexpected character \'{self.sfz_contents[self.i]}\' in file {self.path} at index {self.i} after #include macro definition.")
+                raise SfzPreprocessorError(f"Unexpected character \'{self.sfz_contents[self.i]}\' in file \"{self.path}\" at line {self.line+1} after #include macro definition.")
             else:
                 self.i += 1
 
@@ -105,16 +145,48 @@ class Preprocessor:
                 end_idx = self.i
                 self.i += 1
                 break
+            elif self.sfz_contents[self.i] == '\t':
+                raise SfzPreprocessorError(f"Unexpected tab in file \"{self.path}\" at line {self.line+1} after #include macro definition.")
+            elif self.sfz_contents[self.i] == '\n':
+                raise SfzPreprocessorError(f"Unexpected newline in file \"{self.path}\" at line {self.line+1} after #include macro definition.")
             else:
                 self.i += 1
 
+        # read the rest of the line
+        while self.i < len(self.sfz_contents):
+            if self.sfz_contents[self.i] == '\n':
+                self.i += 1
+                break
+            elif not self.sfz_contents[self.i].isspace():
+                raise SfzPreprocessorError(f"Unexpected character \'{self.sfz_contents[self.i]}\' after include path in file \"{self.path}\" at line {self.line+1} after #include macro definition.")
+            self.i += 1
+
         if start_idx >= end_idx:
-            raise SfzPreprocessorError(f"Improperly formatted include path in file {self.path} at index {self.i} after #include macro definition.")
+            raise SfzPreprocessorError(f"Improperly formatted include path in file \"{self.path}\" at line {self.line+1} after #include macro definition.")
 
         else:
-            include_path = self.sfz_contents[start_idx:end_idx]
             # add the text of the macro include definition to the output buffer
-            self.preprocessed_contents.write(self.sfz_contents[start_macro_idx:self.i])
+            if self.sfz_contents[self.i-1] == '\n':
+                self.preprocessed_contents.write(self.sfz_contents[start_macro_idx:self.i-1])
+            else:
+                self.preprocessed_contents.write(self.sfz_contents[start_macro_idx:self.i])
+
+            include_str = self.sfz_contents[start_idx:end_idx]
+            include_path = os.path.join(pathlib.Path(self.path).parent, include_str)
+            if os.path.exists(include_path):
+                # we need to recursively preprocess the included code
+                with open(include_path, 'r') as subfile:
+                    subcontents = subfile.read()
+                    subpreproc = Preprocessor(subcontents, path=include_path, bindings=self.bindings)
+                    self.preprocessed_contents.seek(0)
+                    processed_contents = self.preprocessed_contents.read()
+                    if len(processed_contents) > 0:
+                        self.source_file_fragments.append(SourceFileFragment(processed_contents, self.path, self.starting_line))
+                        self.starting_line = self.line + 1
+                        self.preprocessed_contents = StringIO()
+                    self.source_file_fragments += subpreproc.source_file_fragments
+            else:
+                raise SfzPreprocessorError(f"Could not locate the file \"{include_str}\" at line {self.line+1} after #include macro definition.")
 
     def define(self):
         """
@@ -135,7 +207,9 @@ class Preprocessor:
                 self.i += 1
                 break
             elif self.sfz_contents[self.i] != ' ' and self.sfz_contents[self.i] != '\t':
-                raise SfzPreprocessorError(f"Unexpected character \'{self.sfz_contents[self.i]}\' in file {self.path} at index {self.i} after #define macro definition.")
+                raise SfzPreprocessorError(f"Unexpected character \'{self.sfz_contents[self.i]}\' in file \"{self.path}\" at line {self.line+1} after #define macro definition.")
+            elif self.sfz_contents[self.i] == '\n':
+                raise SfzPreprocessorError(f"Unexpected newline in file \"{self.path}\" at line {self.line+1} after #define macro definition.")
             else:
                 self.i += 1
 
@@ -145,15 +219,19 @@ class Preprocessor:
                 name_end_idx = self.i
                 self.i += 1
                 break
+            elif self.sfz_contents[self.i] == '\n':
+                raise SfzPreprocessorError(f"Unexpected newline in file \"{self.path}\" at line {self.line+1} after #define macro definition.")
             else:
                 self.i += 1
 
         if name_start_idx >= name_end_idx:
-            raise SfzPreprocessorError(f"Improperly formatted name in file {self.path} at index {self.i} after #define macro definition.")
+            raise SfzPreprocessorError(f"Improperly formatted name in file \"{self.path}\" at line {self.line+1} after #define macro definition.")
 
         # get the start index of the value
         while self.i < len(self.sfz_contents):
-            if self.sfz_contents[self.i] != ' ' and self.sfz_contents[self.i] != '\t':
+            if self.sfz_contents[self.i] == '\n':
+                raise SfzPreprocessorError(f"Unexpected newline in file \"{self.path}\" at line {self.line+1} after #define macro definition.")
+            elif self.sfz_contents[self.i] != ' ' and self.sfz_contents[self.i] != '\t':
                 value_start_idx = self.i
                 self.i += 1
                 break
@@ -164,13 +242,14 @@ class Preprocessor:
         while self.i < len(self.sfz_contents):
             if self.sfz_contents[self.i].isspace():
                 value_end_idx = self.i
-                self.i += 1
+                if self.sfz_contents[self.i] != '\n':
+                    self.i += 1
                 break
             else:
                 self.i += 1
 
         if value_start_idx >= value_end_idx:
-            raise SfzPreprocessorError(f"Improperly formatted value in file {self.path} at index {self.i} after #define macro definition.")
+            raise SfzPreprocessorError(f"Improperly formatted value in file \"{self.path}\" at line {self.line+1} after #define macro definition.")
 
         name = self.sfz_contents[name_start_idx:name_end_idx]
         value = self.sfz_contents[value_start_idx:value_end_idx]
@@ -185,27 +264,19 @@ class Preprocessor:
         """
         # why would anyone want a define name longer than 50 characters?
         LENGTH=50
-        idx = self.i
-        while idx < len(self.sfz_contents) and idx - self.i < LENGTH:
+        idx = self.i + 1
+        candidate_key = ""
+        while idx < len(self.sfz_contents) and idx - self.i < LENGTH and self.sfz_contents[idx] != "\n":
             candidate_key = self.sfz_contents[self.i:idx]
             if candidate_key in self.bindings:
                 self.preprocessed_contents.write(self.bindings[candidate_key])
                 self.i = idx
                 return
             idx += 1
-        raise SfzPreprocessorError(f"Could not find reference \"{self.sfz_contents[self.i:idx]}\" in the macro definition list in file {self.path} at index {self.i}.")
+        candidate_key = self.sfz_contents[self.i:idx]
+        if candidate_key in self.bindings:
+            self.preprocessed_contents.write(self.bindings[candidate_key])
+            self.i = idx
+        else:
+            raise SfzPreprocessorError(f"Could not find reference \"{self.sfz_contents[self.i:idx]}\" in the macro definition list in file \"{self.path}\" at line {self.line+1}.")
         
-
-
-#                     absolute_include_path = os.path.join(str(pathlib.Path(self.path).parent), include_path)
-
-# # If we are recursively evaluating included files, go ahead and lex them into the buffer
-#                     if self.recursive:
-#                         if os.path.exists(absolute_include_path):
-#                             with open(absolute_include_path, 'r') as subsfz:
-#                                 contents = subsfz.read()
-#                                 sublex = Lexer(contents, self.recursive, absolute_include_path)
-#                                 self.tokenized_buffer += sublex.tokenized_buffer
-#                         else:
-#                             raise SfzSyntaxError(f"Cannot find the path for the include file \"{include_path}\" at line {self.line_no + 1}, file \"{self.path}\"")
-                    
