@@ -272,18 +272,19 @@ class Preprocessor:
         # why would anyone want a define name longer than 50 characters?
         LENGTH=50
         idx = self.i + 1
-        candidate_key = ""
+        found_key = ""
+        found_end_idx = -1
         while idx < len(self.sfz_contents) and idx - self.i < LENGTH and not self.sfz_contents[idx].isspace():
-            candidate_key = self.sfz_contents[self.i:idx]
-            if candidate_key in self.bindings:
-                self.preprocessed_contents.write(self.bindings[candidate_key])
-                self.i = idx
-                return
+            if self.sfz_contents[self.i:idx] in self.bindings:
+                found_key = self.sfz_contents[self.i:idx]
+                found_end_idx = idx
             idx += 1
-        candidate_key = self.sfz_contents[self.i:idx]
-        if candidate_key in self.bindings:
-            self.preprocessed_contents.write(self.bindings[candidate_key])
-            self.i = idx
+        if self.sfz_contents[self.i:idx] in self.bindings:
+            found_key = self.sfz_contents[self.i:idx]
+            found_end_idx = idx
+        if found_key != "":
+            self.preprocessed_contents.write(self.bindings[found_key])
+            self.i = found_end_idx
         else:
             raise SfzPreprocessorError(f"Could not find reference \"{self.sfz_contents[self.i:idx]}\" in the macro definition list in file \"{self.path}\" at line {self.line+1}.")
         
