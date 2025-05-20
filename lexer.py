@@ -181,39 +181,99 @@ class LineLexer:
         # handle #include macros
         if macro_lexeme == "#include":
             self.tokenized_buffer.append(Token(TokenType.INCLUDE, macro_lexeme, self.line_no + 1, start_idx + 1, self.path))
+            self.macro_include()
 
-            # Get the trailing string
-            while self.idx < len(self.string):
-                if self.string[self.idx] == ' ':
-                    self.idx += 1
-                elif self.string[self.idx] == '\"':
-                    self.idx += 1
-                    break
-                else:
-                    raise SfzSyntaxError(f"Missing include path after #include at line {self.line_no + 1}, column {self.idx + 1}, file \"{self.path}\"")
-            
-            start_str_idx = self.idx
-
-            while self.idx < len(self.string):
-                if self.string[self.idx] == '\"':
-                    include_path = self.string[start_str_idx:self.idx]
-                    self.tokenized_buffer.append(Token(TokenType.STRING_VALUE, include_path, self.line_no + 1, start_str_idx - 1, self.path))
-                    self.idx += 1
-                    return
-                else:
-                    self.idx += 1
-
-            raise SfzSyntaxError(f"Incorrectly formatted include path after #include at line {self.line_no + 1}, column {start_str_idx}, file \"{self.path}\"")
-        
         # handle #define macros
         elif macro_lexeme == "#define":
             self.tokenized_buffer.append(Token(TokenType.DEFINE, macro_lexeme, self.line_no + 1, start_idx + 1, self.path))
-            # flesh this out later, for now just ignore the value
-            self.idx = len(self.string)
+            self.macro_define()
 
         else:
-            raise SfzSyntaxError(f"Unrecognized macro \"{macro_lexeme}\" at line {self.line_no + 1}, column {start_str_idx}, file \"{self.path}\"")
+            raise SfzSyntaxError(f"Unrecognized macro \"{macro_lexeme}\" at line {self.line_no + 1}, column {start_idx + 1}, file \"{self.path}\"")
 
+    def macro_define(self):
+        """
+        Manages lexing a define macro
+        """
+        idx = self.idx
+
+        # Get the key
+        start_key_idx = -1
+        end_key_idx = -1
+        while idx < len(self.string):
+            if not self.string[idx].isspace():
+                start_key_idx = idx
+                idx += 1
+                break
+            else:
+                idx += 1
+        while idx < len(self.string):
+            if self.string[idx].isspace():
+                end_key_idx = idx
+                break
+            else:
+                idx += 1
+        key = self.string[start_key_idx:end_key_idx]
+        if end_key_idx - start_key_idx < 2:
+            raise SfzSyntaxError(f"Invalid #define key \"{key}\" at line {self.line_no + 1}, column {start_key_idx + 1}, file \"{self.path}\"")
+        else:
+            self.value(key, start_key_idx)
+
+        # Get the value
+        start_val_idx = -1
+        end_val_idx = -1
+        while idx < len(self.string):
+            if not self.string[idx].isspace():
+                start_val_idx = idx
+                idx += 1
+                break
+            else:
+                idx += 1
+        while idx < len(self.string):
+            if self.string[idx].isspace():
+                end_val_idx = idx
+                idx += 1
+                break
+            else:
+                idx += 1
+        if end_val_idx == -1:
+            end_val_idx = idx
+        value = self.string[start_val_idx:end_val_idx]
+        if end_val_idx - start_val_idx < 1:
+            raise SfzSyntaxError(f"Invalid #define value \"{value}\" at line {self.line_no + 1}, column {start_key_idx + 1}, file \"{self.path}\"")
+        self.value(value, start_val_idx)
+        while idx < len(self.string):
+            if not self.string[idx].isspace():
+                raise SfzSyntaxError(f"Unexpected character \'{self.string[idx]}\' after #define key/value pair at line {self.line_no + 1}, column {start_key_idx + 1}, file \"{self.path}\"")
+            idx += 1
+        self.idx = idx
+        
+    def macro_include(self):
+        """
+        Manages lexing an include macro
+        """
+        # Get the trailing string
+        while self.idx < len(self.string):
+            if self.string[self.idx].isspace():
+                self.idx += 1
+            elif self.string[self.idx] == '\"':
+                self.idx += 1
+                break
+            else:
+                raise SfzSyntaxError(f"Missing include path after #include at line {self.line_no + 1}, column {self.idx + 1}, file \"{self.path}\"")
+        
+        start_str_idx = self.idx
+
+        while self.idx < len(self.string):
+            if self.string[self.idx] == '\"':
+                include_path = self.string[start_str_idx:self.idx]
+                self.tokenized_buffer.append(Token(TokenType.STRING_VALUE, include_path, self.line_no + 1, start_str_idx - 1, self.path))
+                self.idx += 1
+                return
+            else:
+                self.idx += 1
+
+        raise SfzSyntaxError(f"Incorrectly formatted include path after #include at line {self.line_no + 1}, column {start_str_idx}, file \"{self.path}\"")
 
     def lex(self):
         """
