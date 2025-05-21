@@ -47,8 +47,15 @@ class Parser:
                 else:
                     raise SfzSyntaxError(f"Bad header token \"{token.lexeme}\" at line {token.line}, column {token.column}.")
             elif token.token_type == TokenType.KEY:
-                # A key must be followed by =
-                if i + 2 >= len(self.tokenized_buffer):
+                # Could it be a #define?
+                if i > 0 and self.tokenized_buffer[i-1].token_type == TokenType.DEFINE:
+                    if i+1 > len(self.tokenized_buffer) or \
+                        (self.tokenized_buffer[i+1].token_type != TokenType.INT_VALUE and 
+                         self.tokenized_buffer[i+1].token_type != TokenType.FLOAT_VALUE and 
+                         self.tokenized_buffer[i+1].token_type != TokenType.STRING_VALUE):
+                        raise SfzSyntaxError(f"A #define macro must be followed by a key and a value (at line {token.line}, column {token.column}).")
+                # Otherwise, a key must be followed by =
+                elif i + 2 >= len(self.tokenized_buffer):
                     raise SfzSyntaxError(f"Bad key/value syntax at line {token.line}, column {token.column}.")
                 elif self.tokenized_buffer[i+1].token_type != TokenType.OPERATOR:
                     raise SfzSyntaxError(f"Bad key/value syntax at line {token.line}, column {token.column}.")
@@ -61,19 +68,24 @@ class Parser:
                     self.tokenized_buffer[i+1].token_type != TokenType.STRING_VALUE:
                     raise SfzSyntaxError(f"Bad key/value syntax at line {token.line}, column {token.column}.")
             elif token.token_type == TokenType.INT_VALUE or token.token_type == TokenType.FLOAT_VALUE or token.token_type == TokenType.STRING_VALUE:
-                if i < 1:
+                # values must be preceded by something
+                if i == 0:
                     raise SfzSyntaxError(f"Bad key/value syntax at line {token.line}, column {token.column}.")
-                # Sometimes a STRING_VALUE is an include path
+                
+                # Sometimes a STRING_VALUE is an include path or the key of a DEFINE binding
                 elif i == 1:
-                    if self.tokenized_buffer[i-1].token_type != TokenType.INCLUDE or token.token_type != TokenType.STRING_VALUE:
-                        raise SfzSyntaxError(f"Bad key/value syntax at line {token.line}, column {token.column}.")
+                    if self.tokenized_buffer[i-1].token_type == TokenType.INCLUDE and token.token_type == TokenType.STRING_VALUE:
+                        pass
                     else:
-                        parsed_buf.append(sfztypes.Include(token.lexeme, self.source_file_path))
-
-                # Values must always be preceded by =
-                elif self.tokenized_buffer[i-1].token_type != TokenType.OPERATOR and self.tokenized_buffer[i-1].token_type != TokenType.INCLUDE:
-                    raise SfzSyntaxError(f"Bad key/value syntax at line {token.line}, column {token.column}.")
-                # If the syntax is correct, add the key/value pair.
+                        raise SfzSyntaxError(f"Bad key/value syntax at line {token.line}, column {token.column}.")
                 else:
-                    current_header.add_attribute(self.tokenized_buffer[i-2].lexeme, token.lexeme)
+                    # if it's a #define, we just ignore it
+                    if self.tokenized_buffer[i-2].token_type == TokenType.DEFINE and self.tokenized_buffer[i-1].token_type == TokenType.KEY:
+                        pass
+                    # Values must always be preceded by =
+                    elif self.tokenized_buffer[i-1].token_type != TokenType.OPERATOR and self.tokenized_buffer[i-1].token_type != TokenType.INCLUDE:
+                        raise SfzSyntaxError(f"Bad key/value syntax at line {token.line}, column {token.column}.")
+                    # If the syntax is correct, add the key/value pair.
+                    else:
+                        current_header.add_attribute(self.tokenized_buffer[i-2].lexeme, token.lexeme)
         return parsed_buf

@@ -217,7 +217,7 @@ class LineLexer:
         if end_key_idx - start_key_idx < 2:
             raise SfzSyntaxError(f"Invalid #define key \"{key}\" at line {self.line_no + 1}, column {start_key_idx + 1}, file \"{self.path}\"")
         else:
-            self.value(key, start_key_idx)
+            self.tokenized_buffer.append(Token(TokenType.KEY, key, self.line_no, start_key_idx, self.path))
 
         # Get the value
         start_val_idx = -1

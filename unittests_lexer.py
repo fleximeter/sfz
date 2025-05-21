@@ -22,8 +22,8 @@ class TestLineLexer(unittest.TestCase):
         contents = "<region>"
         lex = lexer.LineLexer(contents, 5, path)
         self.assertTrue(len(lex.tokenized_buffer) == 1)
-        self.assertEquals(lex.tokenized_buffer[0].token_type, lexer.TokenType.HEADER)
-        self.assertEquals(lex.tokenized_buffer[0].lexeme, "<region>")
+        self.assertEqual(lex.tokenized_buffer[0].token_type, lexer.TokenType.HEADER)
+        self.assertEqual(lex.tokenized_buffer[0].lexeme, "<region>")
     
     def test_key_value(self):
         path = "/home/test/file.sfz"
@@ -120,7 +120,7 @@ class TestLineLexer(unittest.TestCase):
         self.assertTrue(len(lex.tokenized_buffer) == 3)
         self.assertEqual(lex.tokenized_buffer[0].token_type, lexer.TokenType.DEFINE)
         self.assertEqual(lex.tokenized_buffer[0].lexeme, "#define")
-        self.assertEqual(lex.tokenized_buffer[1].token_type, lexer.TokenType.STRING_VALUE)
+        self.assertEqual(lex.tokenized_buffer[1].token_type, lexer.TokenType.KEY)
         self.assertEqual(lex.tokenized_buffer[1].lexeme, "$mydef")
         self.assertEqual(lex.tokenized_buffer[2].token_type, lexer.TokenType.STRING_VALUE)
         self.assertEqual(lex.tokenized_buffer[2].lexeme, "myval")
@@ -130,7 +130,7 @@ class TestLineLexer(unittest.TestCase):
         self.assertTrue(len(lex.tokenized_buffer) == 3)
         self.assertEqual(lex.tokenized_buffer[0].token_type, lexer.TokenType.DEFINE)
         self.assertEqual(lex.tokenized_buffer[0].lexeme, "#define")
-        self.assertEqual(lex.tokenized_buffer[1].token_type, lexer.TokenType.STRING_VALUE)
+        self.assertEqual(lex.tokenized_buffer[1].token_type, lexer.TokenType.KEY)
         self.assertEqual(lex.tokenized_buffer[1].lexeme, "$a")
         self.assertEqual(lex.tokenized_buffer[2].token_type, lexer.TokenType.INT_VALUE)
         self.assertEqual(lex.tokenized_buffer[2].lexeme, 2)

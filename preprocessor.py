@@ -190,6 +190,8 @@ class Preprocessor:
                         self.source_file_fragments.append(SourceFileFragment(processed_contents, self.path, self.starting_line))
                         self.starting_line = self.line + 1
                         self.preprocessed_contents = StringIO()
+                    for key, val in subpreproc.bindings.items():
+                        self.bindings[key] = val
                     self.source_file_fragments += subpreproc.source_file_fragments
             else:
                 raise SfzPreprocessorError(f"Could not locate the file \"{include_str}\" at line {self.line+1} after #include macro definition.")

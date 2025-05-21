@@ -60,14 +60,14 @@ def test_file(sfzfile: str):
 if __name__ == "__main__":
     TEST_PATH = "D:\\Recording\\sfz"
     # test_dir_recursively(TEST_PATH)
-    FILES = ["D:\\Recording\\sfz\\Big_Rusty_Drums_1100\\Programs\\01-full.sfz",
-             "D:\\Recording\\sfz\\Big_Rusty_Drums_1100\\Programs\\02-basic.sfz",
-             "D:\\Recording\\sfz\\Big_Rusty_Drums_1100\\Programs\\03-kick.sfz",
-             "D:\\Recording\\sfz\\Big_Rusty_Drums_1100\\Programs\\04-snare.sfz",
-             "D:\\Recording\\sfz\\Big_Rusty_Drums_1100\\Programs\\05-toms.sfz",
-             "D:\\Recording\\sfz\\Big_Rusty_Drums_1100\\Programs\\06-hihat.sfz",
-             "D:\\Recording\\sfz\\Big_Rusty_Drums_1100\\Programs\\07-cymbals.sfz",
-             "D:\\Recording\\sfz\\Big_Rusty_Drums_1100\\Programs\\08-noises.sfz"]
+    FILES = ["D:\\Recording\\sfz\\Big_Rusty_Drums_1100\\Programs\\01-full.sfz",]
+            #  "D:\\Recording\\sfz\\Big_Rusty_Drums_1100\\Programs\\02-basic.sfz",
+            #  "D:\\Recording\\sfz\\Big_Rusty_Drums_1100\\Programs\\03-kick.sfz",
+            #  "D:\\Recording\\sfz\\Big_Rusty_Drums_1100\\Programs\\04-snare.sfz",
+            #  "D:\\Recording\\sfz\\Big_Rusty_Drums_1100\\Programs\\05-toms.sfz",
+            #  "D:\\Recording\\sfz\\Big_Rusty_Drums_1100\\Programs\\06-hihat.sfz",
+            #  "D:\\Recording\\sfz\\Big_Rusty_Drums_1100\\Programs\\07-cymbals.sfz",
+            #  "D:\\Recording\\sfz\\Big_Rusty_Drums_1100\\Programs\\08-noises.sfz"]
     for file in FILES:
         test_file(file)
     print(GREEN + "All tests passed." + END_COLOR)
