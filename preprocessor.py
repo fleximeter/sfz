@@ -62,6 +62,12 @@ class Preprocessor:
             self.bindings = kwargs["bindings"].copy()
         else:
             self.bindings = {}
+        if "root_dir" in kwargs:
+            self.root_dir = kwargs["root_dir"]
+        elif "path" in kwargs:
+            self.root_dir = pathlib.Path(kwargs["path"]).parent
+        else:
+            self.root_dir = ""
         self.source_file_fragments = []
         self.preprocessed_contents = StringIO()
         self.process()
@@ -178,12 +184,17 @@ class Preprocessor:
                 self.preprocessed_contents.write(self.sfz_contents[start_macro_idx:self.i])
 
             include_str = self.sfz_contents[start_idx:end_idx]
+
+            # The include path can either be relative to the include file, or relative to the original parent file.
             include_path = os.path.join(pathlib.Path(self.path).parent, include_str)
+            global_include_path = os.path.join(self.root_dir, include_str)
+            if os.path.exists(global_include_path) and not os.path.exists(include_path):
+                include_path = global_include_path
             if os.path.exists(include_path):
                 # we need to recursively preprocess the included code
                 with open(include_path, 'r') as subfile:
                     subcontents = subfile.read()
-                    subpreproc = Preprocessor(subcontents, path=include_path, bindings=self.bindings)
+                    subpreproc = Preprocessor(subcontents, path=include_path, root_dir=self.root_dir, bindings=self.bindings)
                     self.preprocessed_contents.seek(0)
                     processed_contents = self.preprocessed_contents.read()
                     if len(processed_contents) > 0:
