@@ -9,6 +9,7 @@ import jsonifier
 import lexer
 import os
 import parser
+import preprocessor
 import re
 import sys
 
@@ -19,8 +20,12 @@ if __name__ == "__main__":
         if os.path.exists(sys.argv[1]):
             with open(sys.argv[1], 'r') as sfz_file:
                 contents = sfz_file.read()
-            lex = lexer.Lexer(contents)
-            parse = parser.Parser(lex)
+            pp = preprocessor.Preprocessor(contents)
+            tokenized_buffer = []
+            for frag in pp.retrieve():
+                lex = lexer.Lexer(frag)
+                tokenized_buffer += lex.tokenized_buffer
+            parse = parser.Parser(tokenized_buffer)
             sample_dict = jsonifier.make_sample_dictionary(parse)
             new_file = re.sub(r'\.sfz$', '', sys.argv[1], re.IGNORECASE) + ".json"
             with open(new_file, 'w') as json_file:
@@ -39,8 +44,12 @@ if __name__ == "__main__":
                         full_path = os.path.join(dir, file)
                         with open(full_path, 'r') as sfz_file:
                             contents = sfz_file.read()
-                        lex = lexer.Lexer(contents)
-                        parse = parser.Parser(lex)
+                        pp = preprocessor.Preprocessor(contents)
+                        tokenized_buffer = []
+                        for frag in pp.retrieve():
+                            lex = lexer.Lexer(frag)
+                            tokenized_buffer += lex.tokenized_buffer
+                        parse = parser.Parser(tokenized_buffer)
                         sample_dict = jsonifier.make_sample_dictionary(parse)
                         new_file = re.sub(r'\.sfz$', '', full_path, re.IGNORECASE) + ".json"
                         with open(new_file, 'w') as json_file:
