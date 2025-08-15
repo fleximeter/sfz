@@ -61,4 +61,4 @@ if __name__ == "__main__":
         else:
             print(f"Error: The directory \"{sys.argv[2]}\" cannot be found.")
     else:
-        print("Usage:\n======\npython converter.py filename_to_convert.sfz\npython converter.py dir path_to_directory\n======\nOutputs a JSON file (or files) with the same name(s) in the same directory.")
+        print("Usage:\n======\npython converter.py filename_to_convert.sfz\npython converter.py --dir path_to_directory\n======\nOutputs a JSON file (or files) with the same name(s) in the same directory.")
